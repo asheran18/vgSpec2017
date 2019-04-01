@@ -4,14 +4,15 @@
 #
 # Intended to manage valgrind simulations of the SPEC2017 bencmarks.
 #
-# NOTE: If we did not have as much control over these parameters
+# Args to this script
+#   NONE
+#
+# NOTE: This Software is provided AS IS.
+# If we did not have as much control over these parameters
 # as we do, much more error handling would be needed to ensure
 # safe operation. For our purposes, however, this would be trivial
 # since the application this is intended for is highly controled.
 #
-# If this program were desired to be made into a universal tool
-# for process management at large, these error handling protocols
-# should be implemented.
 #
 # MuRI 2019
 # Cole Boulanger & Alec Sheran

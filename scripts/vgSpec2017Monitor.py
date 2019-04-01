@@ -4,16 +4,19 @@
 #
 # Intended to manage individual valgrind simulations of the
 # SPEC2017 bencmarks. Writes the current status of the benchmark
-# to the referenced met log file
+# to the referenced met log file.
 #
-# NOTE: If we did not have as much control over these parameters
+# Args to this script
+#   1) The full path of the dirctory of the benchmark executable
+#   2) The full path of the meta log file for signaling the status of this benchmark
+#   3) The full path of the file to store the results for this benchmark
+#
+# NOTE: This Software is provided AS IS.
+# If we did not have as much control over these parameters
 # as we do, much more error handling would be needed to ensure
 # safe operation. For our purposes, however, this would be trivial
 # since the application this is intended for is highly controled.
 #
-# If this program were desired to be made into a universal tool
-# for process management at large, these error handling protocols
-# should be implemented.
 #
 # MuRI 2019
 # Cole Boulanger & Alec Sheran
