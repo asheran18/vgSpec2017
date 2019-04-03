@@ -28,15 +28,16 @@ import os
 import sys
 from collections import deque
 import re
-import pandas as pd
+import csv
 import fnmatch
 
 #########################################
 #           UTILITY FUNCTIONS           #
 #########################################
 # Formats the results folder into raw valgrind outputs and annotated ones
-# Expects 4 args: the root results directory, the raw results directory to make,
+# ARGS: the root results directory, the raw results directory to make,
 # the annotated results directory to make, and a temporary copy of the annotated results
+# RETURNS: nothing
 def prepResultsFolder(root, raw, annotated, tmp):
     # Make the dirs
     makeDirCmd = "mkdir -m 777 " + raw
@@ -57,6 +58,94 @@ def prepResultsFolder(root, raw, annotated, tmp):
     delRes = subprocess.Popen(delResCmd, shell = True)
     delRes.communicate()
 
+# Loops through all benchmarcks in the directory and sorts them by the event
+# ARGS: the resuls directory being worked with, a string of the event to sort by
+# RETURNS: a list of the benchmarks sorted by the event: "benchmark.name <tab> #"
+def sortBenchmarksBy(resDir, eventToSortBy):
+    # Prep the return list
+    sortedBenchmarks = []
+    fmtedSortedBenchmarks = []
+    # Switch on the event to find the column which is cared about
+    switchOnEvent = {
+            'Ir'    : 1,
+            'I1mr'  : 2,
+            'ILmr'  : 3,
+            'Dr'    : 4,
+            'D1mr'  : 5,
+            'DLmr'  : 6,
+            'Dw'    : 7,
+            'D1mw'  : 8,
+            'DLmw'  : 9,
+            'Bc'    : 10,
+            'Bcm'   : 11,
+            'Bi'    : 12,
+            'Bim'   : 13
+    }
+    eventIndex = switchOnEvent.get(eventToSortBy, "NA")
+    # Loop through every file for sorting
+    files = os.listdir(resDir)
+    pattern = "*.*.txt" # All result files must be of the form ###.bmk_name.txt
+    for file in files:
+        if fnmatch.fnmatch(file, pattern):
+            # Get all of the lines in the file
+            data = open(resDir + file).readlines()
+            for line in range(len(data)):
+                data[line] = data[line].split()
+                # Look for the program totals line
+                if ("PROGRAM" in data[line] and "TOTALS" in data[line]):
+                    value = int(data[line][eventIndex].replace(',' , ''))
+                    sortedBenchmarks.append((file, value))
+    # Sort the list by most number of events
+    sortedBenchmarks.sort(key=lambda x:x[1], reverse=True)
+    for bmk in sortedBenchmarks:
+        # Excuse the syntax, this is just for good looking printing
+        num = "{:,}".format(bmk[1])
+        tmpStr = "%-30s %s" % (bmk[0], num)
+        fmtedSortedBenchmarks.append(tmpStr)
+    return fmtedSortedBenchmarks
+
+
+# Interfaces with the user to understand how the data should be processed for
+# further analysis
+# ARGS: the working directory of the results being analyzed
+# RETURNS: a 2 element list: where the first element is a list of results files
+# the user would like to analyze further and the second element is the event
+# they care about
+def getUserSortParameters(resDir):
+    sortAgain = True
+    while(sortAgain):
+        print ( """
+        The name of the event to sort the benchmarks by (Ir I1mr ILmr Dr D1mr DLmr Dw D1mw DLmw Bc Bcm Bi Bim)
+        \t Ir = # of executed instructions
+        \t I1mr = L1 cache read misses
+        \t ILmr = LL cache read misses
+        \t Dr = # of memory reads
+        \t D1mr = D1 cache read misses
+        \t DLmr = LL cache data read misses
+        \t Dw = # of memory writes
+        \t D1mw = D1 cache write misses
+        \t DLmw = LL cache data write misses
+        \t Bc = # of cond. branch executions
+        \t Bcm = cond. branch mispreds
+        \t Bi = indirect branches executed
+        \t Bim = indirect branch mispreds
+        """)
+        sortEvent = raw_input("What would you like to sort the results by? ")
+        sortedBenchByEventList = sortBenchmarksBy(resDir,sortEvent)
+        for x in range(len(sortedBenchByEventList)):
+            print(sortedBenchByEventList[x])
+        sortAgainCheck = raw_input("Sort by different event? [y,n] ")
+        if (sortAgainCheck == 'y'):
+            continue
+        elif (sortAgainCheck == 'n'):
+            sortAgain = False
+        else:
+            continue
+    BenchNumToProcess = input("How many of the top sorted benchmarks would you like to mark for further processing? ")
+    ProcessBenchList = []
+    for x in range(BenchNumToProcess):
+        ProcessBenchList.append(sortedBenchByEventList[x])
+    return [ProcessBenchList, sortEvent]
 
 #########################################
 #      DEFINE ABSOLUTE DIRECTORIES      #
@@ -85,7 +174,14 @@ spec2017RunDir = "run/" # NOTE: relative path - but its the same for every bmk
 #            HANDLE CLA                 #
 #########################################
 if (len(sys.argv) != 2):
-    print ("USAGE\t:\n(1) The name of the dirctory of the run's results (i.e. \"3_21_vgRun\")")
+    print ("USAGE\t:\n(1) The name of the directory of the run's results (i.e. \"3_21_vgRun\")",
+                   "\t(2) The name of the event to sort the benchmarks by (Ir I1mr ILmr Dr D1mr DLmr Dw D1mw DLmw Bc Bcm Bi Bim)",
+                   "\t Ir = # of executed instructions, I1mr = L1 cache read misses, ILmr = LL cache read misses ",
+                   "\t Dr = # of memory reads, D1mr = D1 cache read misses, DLmr = LL cache data read misses ",
+                   "\t Dw = # of memory writes, D1mw = D1 cache write misses, DLmw = LL cache data write misses ",
+                   "\t Bc = # of cond. branch executions, Bcm = cond. branch mispreds ",
+                   "\t Bi = indirect branches executed, Bim = indirect branch mispreds "
+                   )
     quit()
 else:
     vgSpecThisResultsDir = vgResultDir + sys.argv[1] + "/"
@@ -127,10 +223,10 @@ for file in files:
         for line in range(len(data)):
             data[line] = str(i) + "\t" + data[line]
             i += 1
-        #
-        # Do some more processing
-        #
         # Write the formatted data back to the file
         with open(vgSpecThisResultsTmp + file, 'w') as updatedData:
             for item in data:
                 updatedData.write(item)
+# Let's ask the user what they want to do
+analysisList = []
+analysisList = getUserSortParameters(vgSpecThisResultsTmp)
