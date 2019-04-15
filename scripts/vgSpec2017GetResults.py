@@ -108,9 +108,7 @@ def sortBenchmarksBy(resDir, eventToSortBy):
 # Interfaces with the user to understand how the data should be processed for
 # further analysis
 # ARGS: the working directory of the results being analyzed
-# RETURNS: a 2 element list: where the first element is a list of results files
-# the user would like to analyze further and the second element is the event
-# they care about
+# RETURNS: the event the user cares about and wants to do analysis with respect to
 def getUserSortParameters(resDir):
     sortAgain = True
     while(sortAgain):
@@ -134,18 +132,18 @@ def getUserSortParameters(resDir):
         sortedBenchByEventList = sortBenchmarksBy(resDir,sortEvent)
         for x in range(len(sortedBenchByEventList)):
             print(sortedBenchByEventList[x])
-        sortAgainCheck = raw_input("Sort by different event? [y,n] ")
+        sortAgainCheck = raw_input("Sort by different event? [y/n] ")
         if (sortAgainCheck == 'y'):
             continue
         elif (sortAgainCheck == 'n'):
-            sortAgain = False
+            sortConfirm = raw_input("Confirm that you would like to process hotspots of events: "+ sortEvent + " [y/n] ")
+            if(sortConfirm == 'y'):
+                sortAgain = False
+            else:
+                continue
         else:
             continue
-    BenchNumToProcess = input("How many of the top sorted benchmarks would you like to mark for further processing? ")
-    ProcessBenchList = []
-    for x in range(BenchNumToProcess):
-        ProcessBenchList.append(sortedBenchByEventList[x])
-    return [ProcessBenchList, sortEvent]
+    return sortEvent
 
 #########################################
 #      DEFINE ABSOLUTE DIRECTORIES      #
@@ -174,14 +172,10 @@ spec2017RunDir = "run/" # NOTE: relative path - but its the same for every bmk
 #            HANDLE CLA                 #
 #########################################
 if (len(sys.argv) != 2):
-    print ("USAGE\t:\n(1) The name of the directory of the run's results (i.e. \"3_21_vgRun\")",
-                   "\t(2) The name of the event to sort the benchmarks by (Ir I1mr ILmr Dr D1mr DLmr Dw D1mw DLmw Bc Bcm Bi Bim)",
-                   "\t Ir = # of executed instructions, I1mr = L1 cache read misses, ILmr = LL cache read misses ",
-                   "\t Dr = # of memory reads, D1mr = D1 cache read misses, DLmr = LL cache data read misses ",
-                   "\t Dw = # of memory writes, D1mw = D1 cache write misses, DLmw = LL cache data write misses ",
-                   "\t Bc = # of cond. branch executions, Bcm = cond. branch mispreds ",
-                   "\t Bi = indirect branches executed, Bim = indirect branch mispreds "
-                   )
+    USAGE = ("USAGE\t:\n" +
+            "\t\"python vgSpec2017GetResults.py <1>\"\n" +
+            "\t<1> = The name of the directory of the run's results (i.e. \"3_21_vgRun\")")
+    print USAGE
     quit()
 else:
     vgSpecThisResultsDir = vgResultDir + sys.argv[1] + "/"
@@ -228,5 +222,6 @@ for file in files:
             for item in data:
                 updatedData.write(item)
 # Let's ask the user what they want to do
-analysisList = []
-analysisList = getUserSortParameters(vgSpecThisResultsTmp)
+analysisParameter = getUserSortParameters(vgSpecThisResultsTmp)
+# Find the hotspots for every benchmark
+print analysisParameter
