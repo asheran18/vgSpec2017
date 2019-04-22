@@ -38,7 +38,7 @@ import fnmatch
 # ARGS: the root results directory, the raw results directory to make,
 # the annotated results directory to make, and a temporary copy of the annotated results
 # RETURNS: nothing
-def prepResultsFolder(root, raw, annotated, tmp):
+def prepResultsFolder(root, raw, annotated, formatted):
     # Make the dirs
     makeDirCmd = "mkdir -m 777 " + raw
     makeDir = subprocess.Popen(makeDirCmd, shell = True)
@@ -46,7 +46,7 @@ def prepResultsFolder(root, raw, annotated, tmp):
     makeDirCmd = "mkdir -m 777 " + annotated
     makeDir = subprocess.Popen(makeDirCmd, shell = True)
     makeDir.communicate()
-    makeDirCmd = "mkdir -m 777 " + tmp
+    makeDirCmd = "mkdir -m 777 " + formatted
     makeDir = subprocess.Popen(makeDirCmd, shell = True)
     makeDir.communicate()
     # Copy the raw results
@@ -57,6 +57,19 @@ def prepResultsFolder(root, raw, annotated, tmp):
     delResCmd = "rm " + root + "*.*.txt "
     delRes = subprocess.Popen(delResCmd, shell = True)
     delRes.communicate()
+    for root,dirs,files in os.walk(raw):
+        for filename in files:
+            print(filename)
+            newFile = formatted + "/" + filename[:-4] + "/"
+            makeDirCmd = "mkdir -m 777 " + newFile
+            makeDir = subprocess.Popen(makeDirCmd, shell = True)
+            makeDir.communicate()
+            makeDirCmd = "mkdir -m 777 " + newFile + "branch/"
+            makeDir = subprocess.Popen(makeDirCmd, shell = True)
+            makeDir.communicate()
+            makeDirCmd = "mkdir -m 777 " + newFile + "cache/"
+            makeDir = subprocess.Popen(makeDirCmd, shell = True)
+            makeDir.communicate()
 
 # Loops through all benchmarcks in the directory and sorts them by the event
 # ARGS: the resuls directory being worked with, a string of the event to sort by
@@ -181,9 +194,9 @@ else:
     vgSpecThisResultsDir = vgResultDir + sys.argv[1] + "/"
     vgSpecThisResultsRaw = vgSpecThisResultsDir + "raw/"
     vgSpecThisResultsAnn = vgSpecThisResultsDir + "annotated/"
-    vgSpecThisResultsTmp = vgSpecThisResultsDir + "tmp/"
+    vgSpecThisResultsFmt = vgSpecThisResultsDir + "formatted/"
     # Make the raw and annoted directories as well as the temporary
-    prepResultsFolder(vgSpecThisResultsDir, vgSpecThisResultsRaw, vgSpecThisResultsAnn, vgSpecThisResultsTmp)
+    prepResultsFolder(vgSpecThisResultsDir, vgSpecThisResultsRaw, vgSpecThisResultsAnn, vgSpecThisResultsFmt)
 
 #########################################
 #        ANNOTATION OF RESULTS          #
@@ -197,31 +210,27 @@ for file in files:
         annotateCmd = "cg_annotate --auto=yes " + vgSpecThisResultsRaw + file + " > " + vgSpecThisResultsAnn + file
         annotateRes = subprocess.Popen(annotateCmd, shell = True)
         annotateRes.communicate()
-        # Copy to the tmp directory for further formatting
-        copyResCmd = "cp " + vgSpecThisResultsAnn + file + " " + vgSpecThisResultsTmp
-        copyRes = subprocess.Popen(copyResCmd, shell = True)
-        copyRes.communicate()
 
 #########################################
 #          SORTING OF RESULTS           #
 #########################################
 # Walk through all of the results files and annotate
-files = os.listdir(vgSpecThisResultsTmp)
+files = os.listdir(vgSpecThisResultsAnn)
 pattern = "*.*.txt" # All result files must be of the form ###.bmk_name.txt
 data = [] # Holds the entire text dump of the annotated results
 for file in files:
     if fnmatch.fnmatch(file, pattern):
-        data = open(vgSpecThisResultsTmp + file).readlines()
+        data = open(vgSpecThisResultsAnn + file).readlines()
         # Prepend a line number to each line
         i = 0
         for line in range(len(data)):
             data[line] = str(i) + "\t" + data[line]
             i += 1
         # Write the formatted data back to the file
-        with open(vgSpecThisResultsTmp + file, 'w') as updatedData:
+        with open(vgSpecThisResultsAnn + file, 'w') as updatedData:
             for item in data:
                 updatedData.write(item)
 # Let's ask the user what they want to do
-analysisParameter = getUserSortParameters(vgSpecThisResultsTmp)
+analysisParameter = getUserSortParameters(vgSpecThisResultsAnn)
 # Find the hotspots for every benchmark
 print analysisParameter
