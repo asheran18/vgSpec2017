@@ -57,9 +57,9 @@ def prepResultsFolder(root, raw, annotated, formatted):
     delResCmd = "rm " + root + "*.*.txt "
     delRes = subprocess.Popen(delResCmd, shell = True)
     delRes.communicate()
+    # Making the final formatted results directories
     for root,dirs,files in os.walk(raw):
         for filename in files:
-            print(filename)
             newFile = formatted + "/" + filename[:-4] + "/"
             makeDirCmd = "mkdir -m 777 " + newFile
             makeDir = subprocess.Popen(makeDirCmd, shell = True)
@@ -71,13 +71,12 @@ def prepResultsFolder(root, raw, annotated, formatted):
             makeDir = subprocess.Popen(makeDirCmd, shell = True)
             makeDir.communicate()
 
-# Loops through all benchmarcks in the directory and sorts them by the event
-# ARGS: the resuls directory being worked with, a string of the event to sort by
-# RETURNS: a list of the benchmarks sorted by the event: "benchmark.name <tab> #"
-def sortBenchmarksBy(resDir, eventToSortBy):
-    # Prep the return list
-    sortedBenchmarks = []
-    fmtedSortedBenchmarks = []
+#
+# ARGS: the benchmark name, the annotated result file, directory of formatted results,
+# the summary output file, the event to analyze (string), the percentage to analyze (decimal < 1),
+# the number of lines above and below the hot spot to grab
+# RETURNS: nothing
+def analyzeHotspots(bmkName, resultToAnalyze, indivOutputDir, summaryOutputFile, eventToAnalyze, percentToAnalyze, regionToAnalyze):
     # Switch on the event to find the column which is cared about
     switchOnEvent = {
             'Ir'    : 1,
@@ -94,75 +93,122 @@ def sortBenchmarksBy(resDir, eventToSortBy):
             'Bi'    : 12,
             'Bim'   : 13
     }
-    eventIndex = switchOnEvent.get(eventToSortBy, "NA")
-    # Loop through every file for sorting
-    files = os.listdir(resDir)
-    pattern = "*.*.txt" # All result files must be of the form ###.bmk_name.txt
-    for file in files:
-        if fnmatch.fnmatch(file, pattern):
-            # Get all of the lines in the file
-            data = open(resDir + file).readlines()
-            for line in range(len(data)):
-                data[line] = data[line].split()
-                # Look for the program totals line
-                if ("PROGRAM" in data[line] and "TOTALS" in data[line]):
-                    value = int(data[line][eventIndex].replace(',' , ''))
-                    sortedBenchmarks.append((file, value))
+    eventIndex = switchOnEvent.get(eventToAnalyze, "NA")
+
+    # Get all of the lines in the file
+    eventData = []
+    sortedEventData = []
+    splitData = []
+    rawData = open(resultToAnalyze).readlines()
+    dataStart = False
+    totalEvents = 0
+    for line in range(len(rawData)):
+        # Wait until the first source annotated shows up
+        if (not dataStart and "Auto-annotated source" in rawData[line]):
+            dataStart = True
+        # Process until the final summary is seen
+        elif (dataStart and "percentage of events annotated" in rawData[line]):
+            dataStart= False
+        # Otherwise process the line
+        elif (dataStart):
+            # Split the line by tabs
+            splitData = rawData[line].split()
+            # Make sure this line has at least an expected number of columns
+            if (len(splitData) > eventIndex):
+                # Ignore comment lines - they start with a dash
+                if (("-" not in splitData[1])):
+                    # Just to parse a number with commas as a proper integer
+                    value = splitData[eventIndex].replace(',' , '') if splitData[eventIndex] != '.' else '0'
+                    if (value.isdigit()):
+                        totalEvents += int(value)
+                        eventData.append((int(splitData[0]), int(value)))
     # Sort the list by most number of events
-    sortedBenchmarks.sort(key=lambda x:x[1], reverse=True)
-    for bmk in sortedBenchmarks:
-        # Excuse the syntax, this is just for good looking printing
-        num = "{:,}".format(bmk[1])
-        tmpStr = "%-30s %s" % (bmk[0], num)
-        fmtedSortedBenchmarks.append(tmpStr)
-    return fmtedSortedBenchmarks
+    eventData.sort(key=lambda x:x[1], reverse=True)
 
+    # Determine the top <percentToAnalyze> percent of the hot instructions
+    hotList = []
+    threshold = percentToAnalyze * float(totalEvents)
+    accumulator = 0
+    iterator = 0
+    while (accumulator < threshold):
+        hotList.append(eventData[iterator])
+        accumulator += eventData[iterator][1]
+        iterator += 1
 
-# Interfaces with the user to understand how the data should be processed for
-# further analysis
-# ARGS: the working directory of the results being analyzed
-# RETURNS: the event the user cares about and wants to do analysis with respect to
-def getUserSortParameters(resDir):
-    sortAgain = True
-    while(sortAgain):
-        print ( """
-        The name of the event to sort the benchmarks by (Ir I1mr ILmr Dr D1mr DLmr Dw D1mw DLmw Bc Bcm Bi Bim)
-        \t Ir = # of executed instructions
-        \t I1mr = L1 cache read misses
-        \t ILmr = LL cache read misses
-        \t Dr = # of memory reads
-        \t D1mr = D1 cache read misses
-        \t DLmr = LL cache data read misses
-        \t Dw = # of memory writes
-        \t D1mw = D1 cache write misses
-        \t DLmw = LL cache data write misses
-        \t Bc = # of cond. branch executions
-        \t Bcm = cond. branch mispreds
-        \t Bi = indirect branches executed
-        \t Bim = indirect branch mispreds
-        """)
-        sortEvent = raw_input("What would you like to sort the results by? ")
-        sortedBenchByEventList = sortBenchmarksBy(resDir,sortEvent)
-        for x in range(len(sortedBenchByEventList)):
-            print(sortedBenchByEventList[x])
-        sortAgainCheck = raw_input("Sort by different event? [y/n] ")
-        if (sortAgainCheck == 'y'):
-            continue
-        elif (sortAgainCheck == 'n'):
-            sortConfirm = raw_input("Confirm that you would like to process hotspots of events: "+ sortEvent + " [y/n] ")
-            if(sortConfirm == 'y'):
-                sortAgain = False
-            else:
-                continue
-        else:
-            continue
-    return sortEvent
+    # Before doing the processing, prepare the final summary file
+    with open(summaryOutputFile, 'w') as out:
+        header = "-------------------------------------------------------------------------------------------------\n"
+        header = header + "------------------------ SUMMARY OF TOP INSTRUCTIONS FOR " + bmkName + " ------------------------\n"
+        header = header + "-------------------------------------------------------------------------------------------------\n\n"
+        out.write(header)
+        header = ['Line Number', eventToAnalyze, 'Percent of Total','Instruction']
+        out.write('{0:^20} {1:^20} {2:^20} {3}'.format(*header))
+        out.write('\n')
+        header = ['-----------', '------', '----------------', '-----------']
+        out.write('{0:^20} {1:^20} {2:^20} {3}'.format(*header))
+        out.write('\n')
+
+    # For now we'll only do the analysis on the top 10 (if there are at least 10)
+    topInstructions = 10
+    if len(hotList) < 10:
+        topInstructions = len(hotList)
+    percAccum = 0
+    eventAccum = 0
+    for j in range(topInstructions):
+        i = hotList[j][0] - regionToAnalyze
+        code = []
+        # We grab the region of code around the hot instruction
+        while (i <= (hotList[j][0] + regionToAnalyze)):
+            if (len(rawData[i].split(None, 14)) > 14):
+                # A little confusing, but just grabs the line number, the data point, and the code for that line while preserving tabs
+                buff = [str(rawData[i].split(None, 14)[0]), str(rawData[i].split(None, 14)[eventIndex]), str(rawData[i].split(None, 13)[-1].split(' ',1)[1]).rstrip()]
+                code.append('{0:<20} {1:<20} {2}'.format(*buff))
+            i += 1
+        # Writing to the ouput file for this hotspot
+        indivOutputFile = indivOutputDir + "top" + str(j+1) + ".txt"
+        with open(indivOutputFile, 'a') as out:
+            # Prepare the header to the output file
+            percOfTotal = str(float(hotList[j][1])/float(totalEvents)*100.0)
+            header = "--------------------------------------------------------------------------------------------------\n"
+            header = header + "--- Hot Instruction Number " + str(j+1) + " has " + str(hotList[j][1]) + " events associated with it (" + percOfTotal[0:5] + " % of total events) ---\n"
+            header = header + "--------------------------------------------------------------------------------------------------\n"
+            out.write(header)
+            header = ['Line Number', eventToAnalyze, 'Instruction']
+            out.write('{0:<20} {1:<20} {2}'.format(*header))
+            out.write('\n')
+            header = ['------', '------', '------']
+            out.write('{0:<20} {1:<20} {2}'.format(*header))
+            out.write('\n')
+            # Write all of the lines to the file
+            for line in code:
+                out.write(line)
+                out.write('\n')
+        # Iteratively update the final summary file
+        with open(summaryOutputFile, 'a') as out:
+            value = rawData[hotList[j][0]].split(None, 14)[eventIndex]
+            value = value.replace(',' , '') if value != '.' else '0'
+            percent = float(value)/float(totalEvents) * 100.0
+            percAccum += percent
+            eventAccum += int(value)
+            percentstr = str(percent)[0:5] + " %"
+            # Similar buffer to before, only including the percentage
+            buff = [str(rawData[hotList[j][0]].split(None, 14)[0]), str(rawData[hotList[j][0]].split(None, 14)[eventIndex]), percentstr, str(rawData[hotList[j][0]].split(None, 14)[-1].rstrip())]
+            out.write('{0:^20} {1:^20} {2:^20} {3}'.format(*buff))
+            out.write('\n')
+
+    # Finish the summary file
+    with open(summaryOutputFile, 'a') as out:
+        footer = "-------------------------------------------------------------------------------------------------\n"
+        out.write(footer)
+        footer = ['TOTALS', str(eventAccum), str(percAccum)[0:5] + ' %',' ']
+        out.write('{0:^20} {1:^20} {2:^20} {3}'.format(*footer))
+        out.write('\n')
 
 #########################################
 #      DEFINE ABSOLUTE DIRECTORIES      #
 #########################################
 # Absolute path to the workspace
-baseOperatingDir = "/mnt/c/Users/Alec/Desktop/"#"/local/alec/cole_workspace/"
+baseOperatingDir = "/local/alec/cole_workspace/"
 #Base directories for vgSpec2017(ours) and spec2017(spec's)
 spec2017Dir = baseOperatingDir + "spec/"
 vgSpecDir = baseOperatingDir + "vgSpec2017/"
@@ -230,7 +276,128 @@ for file in files:
         with open(vgSpecThisResultsAnn + file, 'w') as updatedData:
             for item in data:
                 updatedData.write(item)
-# Let's ask the user what they want to do
-analysisParameter = getUserSortParameters(vgSpecThisResultsAnn)
-# Find the hotspots for every benchmark
-print analysisParameter
+
+# Analyze the hotspots for every benchmark
+files = os.listdir(vgSpecThisResultsAnn)
+pattern = "*.*.txt" # All result files must be of the form ###.bmk_name.txt
+for file in files:
+    # Only do analysis if there is an annotated copy
+    if fnmatch.fnmatch(file, pattern):
+        # Prepare the function call
+        bmkName = file[0:-4]
+        resultToAnalyze = vgSpecThisResultsAnn + file
+        indivOutputDir = vgSpecThisResultsFmt + bmkName +"/cache/"
+        summaryOutputFile = indivOutputDir + "summary.txt"
+        eventToAnalyze = "DLmr"
+        percentToAnalyze = .90
+        regionToAnalyze = 30
+        # Do the analysis on DLmr
+        analyzeHotspots(bmkName, resultToAnalyze, indivOutputDir, summaryOutputFile, eventToAnalyze, percentToAnalyze, regionToAnalyze)
+        # Do the analysis on Bcm
+        indivOutputDir = vgSpecThisResultsFmt + bmkName + "/branch/"
+        summaryOutputFile = indivOutputDir + "summary.txt"
+        eventToAnalyze = "Bcm"
+        analyzeHotspots(bmkName, resultToAnalyze, indivOutputDir, summaryOutputFile, eventToAnalyze, percentToAnalyze, regionToAnalyze)
+
+
+#########################################
+#           UNUSED FUNCTIONS            #
+#########################################
+
+# The following functions are currently unsued in this framework.
+# However, they have been verified to be working and may be useful in
+# the future.
+#
+# We decided to do the analysis with respect to DLmr and Bcm only, so
+# there is no need to really interface with the user. In the event user
+# input is desired at some point, these should help get the job done.
+#
+# We have left them in for this reason.
+
+# *** THIS FUNCTION IS UNUSED ***
+# Loops through all benchmarcks in the directory and sorts them by the event
+# ARGS: the resuls directory being worked with, a string of the event to sort by
+# RETURNS: a list of the benchmarks sorted by the event: "benchmark.name <tab> #"
+def sortBenchmarksBy(resDir, eventToSortBy):
+    # Prep the return list
+    sortedBenchmarks = []
+    fmtedSortedBenchmarks = []
+    # Switch on the event to find the column which is cared about
+    switchOnEvent = {
+            'Ir'    : 1,
+            'I1mr'  : 2,
+            'ILmr'  : 3,
+            'Dr'    : 4,
+            'D1mr'  : 5,
+            'DLmr'  : 6,
+            'Dw'    : 7,
+            'D1mw'  : 8,
+            'DLmw'  : 9,
+            'Bc'    : 10,
+            'Bcm'   : 11,
+            'Bi'    : 12,
+            'Bim'   : 13
+    }
+    eventIndex = switchOnEvent.get(eventToSortBy, "NA")
+    # Loop through every file for sorting
+    files = os.listdir(resDir)
+    pattern = "*.*.txt" # All result files must be of the form ###.bmk_name.txt
+    for file in files:
+        if fnmatch.fnmatch(file, pattern):
+            # Get all of the lines in the file
+            data = open(resDir + file).readlines()
+            for line in range(len(data)):
+                data[line] = data[line].split()
+                # Look for the program totals line
+                if ("PROGRAM" in data[line] and "TOTALS" in data[line]):
+                    value = int(data[line][eventIndex].replace(',' , ''))
+                    sortedBenchmarks.append((file, value))
+    # Sort the list by most number of events
+    sortedBenchmarks.sort(key=lambda x:x[1], reverse=True)
+    for bmk in sortedBenchmarks:
+        # Excuse the syntax, this is just for good looking printing
+        num = "{:,}".format(bmk[1])
+        tmpStr = "%-30s %s" % (bmk[0], num)
+        fmtedSortedBenchmarks.append(tmpStr)
+    return fmtedSortedBenchmarks
+
+# *** THIS FUNCTION IS UNUSED ***
+# Interfaces with the user to understand how the data should be processed for
+# further analysis
+# ARGS: the working directory of the results being analyzed
+# RETURNS: the event the user cares about and wants to do analysis with respect to
+def getUserSortParameters(resDir):
+    sortAgain = True
+    while(sortAgain):
+        print ( """
+        The name of the event to sort the benchmarks by (Ir I1mr ILmr Dr D1mr DLmr Dw D1mw DLmw Bc Bcm Bi Bim)
+        \t Ir = # of executed instructions
+        \t I1mr = L1 cache read misses
+        \t ILmr = LL cache read misses
+        \t Dr = # of memory reads
+        \t D1mr = D1 cache read misses
+        \t DLmr = LL cache data read misses
+        \t Dw = # of memory writes
+        \t D1mw = D1 cache write misses
+        \t DLmw = LL cache data write misses
+        \t Bc = # of cond. branch executions
+        \t Bcm = cond. branch mispreds
+        \t Bi = indirect branches executed
+        \t Bim = indirect branch mispreds
+        """)
+        sortEvent = raw_input("What would you like to sort the results by? ")
+        sortedBenchByEventList = sortBenchmarksBy(resDir,sortEvent)
+        for x in range(len(sortedBenchByEventList)):
+            print(sortedBenchByEventList[x])
+        sortAgainCheck = raw_input("Sort by different event? [y/n] ")
+        if (sortAgainCheck == 'y'):
+            continue
+        elif (sortAgainCheck == 'n'):
+            sortConfirm = raw_input("Confirm that you would like to process hotspots of events: "+ sortEvent + " [y/n] ")
+            if(sortConfirm == 'y'):
+                sortAgain = False
+            else:
+                continue
+        else:
+            continue
+    return sortEvent
