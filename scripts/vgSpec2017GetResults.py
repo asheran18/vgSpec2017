@@ -165,6 +165,7 @@ def analyzeHotspots(bmkName, resultToAnalyze, indivOutputDir, summaryOutputFile,
                 code.append('{0:<20} {1:<20} {2}'.format(*buff))
             i += 1
         # Writing to the ouput file for this hotspot
+        # TODO: Add file name to indivOutputFile by searching up until file is found 
         indivOutputFile = indivOutputDir + "top" + str(j+1) + ".txt"
         with open(indivOutputFile, 'a') as out:
             # Prepare the header to the output file
