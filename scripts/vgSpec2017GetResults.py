@@ -173,10 +173,13 @@ def analyzeHotspots(bmkName, resultToAnalyze, indivOutputDir, summaryOutputFile,
             k -= 1
         # We grab the region of code around the hot instruction
         while (i <= (hotList[j][0] + regionToAnalyze)):
-            if (len(rawData[i].split(None, 14)) > 14):
-                # A little confusing, but just grabs the line number, the data point, and the code for that line while preserving tabs
-                buff = [str(rawData[i].split(None, 14)[0]), str(rawData[i].split(None, 14)[eventIndex]), str(rawData[i].split(None, 13)[-1].split(' ',1)[1]).rstrip()]
-                code.append('{0:<20} {1:<20} {2}'.format(*buff))
+            # To avoid an out of range error
+            if (i < len(rawData)):
+                if (rawData[i].split() > 14):
+                    if (len(rawData[i].split(None, 14)) > 14):
+                        # A little confusing, but just grabs the line number, the data point, and the code for that line while preserving tabs
+                        buff = [str(rawData[i].split(None, 14)[0]), str(rawData[i].split(None, 14)[eventIndex]), str(rawData[i].split(None, 13)[-1].split(' ',1)[1]).rstrip()]
+                        code.append('{0:<20} {1:<20} {2}'.format(*buff))
             i += 1
         # Writing to the ouput file for this hotspot
         # TODO: Add file name to indivOutputFile by searching up until file is found
