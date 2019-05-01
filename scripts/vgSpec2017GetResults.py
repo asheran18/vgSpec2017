@@ -71,7 +71,9 @@ def prepResultsFolder(root, raw, annotated, formatted):
             makeDir = subprocess.Popen(makeDirCmd, shell = True)
             makeDir.communicate()
 
-#
+# The main payload of this script. Finds the hotspots for the given event in the given
+# benchmark and grabs the region of code each one lies within. It then generates a file
+# for each hotspot and its region, as well as a summary file for all hotspots of the benchmark
 # ARGS: the benchmark name, the annotated result file, directory of formatted results,
 # the summary output file, the event to analyze (string), the percentage to analyze (decimal < 1),
 # the number of lines above and below the hot spot to grab
@@ -156,7 +158,15 @@ def analyzeHotspots(bmkName, resultToAnalyze, indivOutputDir, summaryOutputFile,
     eventAccum = 0
     for j in range(topInstructions):
         i = hotList[j][0] - regionToAnalyze
+        k = hotList[j][0]
         code = []
+        source = ""
+        # First get the source file the hot instruction is from by walking up
+        while (k > 0):
+            if ("Auto-annotated source" in rawData[k]):
+                source = rawData[k]
+                break
+            k -= 1
         # We grab the region of code around the hot instruction
         while (i <= (hotList[j][0] + regionToAnalyze)):
             if (len(rawData[i].split(None, 14)) > 14):
@@ -165,7 +175,7 @@ def analyzeHotspots(bmkName, resultToAnalyze, indivOutputDir, summaryOutputFile,
                 code.append('{0:<20} {1:<20} {2}'.format(*buff))
             i += 1
         # Writing to the ouput file for this hotspot
-        # TODO: Add file name to indivOutputFile by searching up until file is found 
+        # TODO: Add file name to indivOutputFile by searching up until file is found
         indivOutputFile = indivOutputDir + "top" + str(j+1) + ".txt"
         with open(indivOutputFile, 'a') as out:
             # Prepare the header to the output file
@@ -173,6 +183,7 @@ def analyzeHotspots(bmkName, resultToAnalyze, indivOutputDir, summaryOutputFile,
             header = "--------------------------------------------------------------------------------------------------\n"
             header = header + "--- Hot Instruction Number " + str(j+1) + " has " + str(hotList[j][1]) + " events associated with it (" + percOfTotal[0:5] + " % of total events) ---\n"
             header = header + "--------------------------------------------------------------------------------------------------\n"
+            header = header + source + "\n"    
             out.write(header)
             header = ['Line Number', eventToAnalyze, 'Instruction']
             out.write('{0:<20} {1:<20} {2}'.format(*header))

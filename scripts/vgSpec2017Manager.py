@@ -31,7 +31,10 @@ from collections import deque
 #           UTILITY FUNCTIONS           #
 #########################################
 # Finds the most recently run directory in a given path
-# Expects standard spec2017 run directory format: "run_base_ref<type>_<configname>.<4digitnumber>"
+# ARGS: the full path to the benchmarks's spec2017 run directory. Expects
+# standard spec2017 run directory format: "run_base_ref<type>_<configname>.<4digitnumber>"
+# RETURNS: the path to the most up-to-date directory containing executables within
+# the passed directory
 def findMostRecentExeDir(pathToParentDir):
     children = os.listdir(pathToParentDir)
     currentGuessDir = children[0]
