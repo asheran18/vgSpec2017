@@ -40,6 +40,7 @@ import fnmatch
 # RETURNS: nothing
 def prepResultsFolder(root, raw, annotated, formatted):
     # Make the dirs
+    sys.stdout.write("Preparing results folder...")
     makeDirCmd = "mkdir -m 777 " + raw
     makeDir = subprocess.Popen(makeDirCmd, shell = True)
     makeDir.communicate()
@@ -70,6 +71,7 @@ def prepResultsFolder(root, raw, annotated, formatted):
             makeDirCmd = "mkdir -m 777 " + newFile + "cache/"
             makeDir = subprocess.Popen(makeDirCmd, shell = True)
             makeDir.communicate()
+    sys.stdout.write("done\n")
 
 # The main payload of this script. Finds the hotspots for the given event in the given
 # benchmark and grabs the region of code each one lies within. It then generates a file
@@ -79,6 +81,7 @@ def prepResultsFolder(root, raw, annotated, formatted):
 # the number of lines above and below the hot spot to grab
 # RETURNS: nothing
 def analyzeHotspots(bmkName, resultToAnalyze, indivOutputDir, summaryOutputFile, eventToAnalyze, percentToAnalyze, regionToAnalyze):
+    sys.stdout.write("Beginning hotspot search on " + bmkName + "...")
     # Switch on the event to find the column which is cared about
     switchOnEvent = {
             'Ir'    : 1,
@@ -126,7 +129,7 @@ def analyzeHotspots(bmkName, resultToAnalyze, indivOutputDir, summaryOutputFile,
                         eventData.append((int(splitData[0]), int(value)))
     # Sort the list by most number of events
     eventData.sort(key=lambda x:x[1], reverse=True)
-
+    sys.stdout.write("search complete\n")
     # Determine the top <percentToAnalyze> percent of the hot instructions
     hotList = []
     threshold = percentToAnalyze * float(totalEvents)
@@ -138,6 +141,7 @@ def analyzeHotspots(bmkName, resultToAnalyze, indivOutputDir, summaryOutputFile,
         iterator += 1
 
     # Before doing the processing, prepare the final summary file
+    sys.stdout.write("Generating output files for " + bmkName + "...")
     with open(summaryOutputFile, 'w') as out:
         header = "-------------------------------------------------------------------------------------------------\n"
         header = header + "------------------------ SUMMARY OF TOP INSTRUCTIONS FOR " + bmkName + " ------------------------\n"
@@ -183,7 +187,7 @@ def analyzeHotspots(bmkName, resultToAnalyze, indivOutputDir, summaryOutputFile,
             header = "--------------------------------------------------------------------------------------------------\n"
             header = header + "--- Hot Instruction Number " + str(j+1) + " has " + str(hotList[j][1]) + " events associated with it (" + percOfTotal[0:5] + " % of total events) ---\n"
             header = header + "--------------------------------------------------------------------------------------------------\n"
-            header = header + source + "\n"    
+            header = header + source + "\n"
             out.write(header)
             header = ['Line Number', eventToAnalyze, 'Instruction']
             out.write('{0:<20} {1:<20} {2}'.format(*header))
@@ -215,6 +219,7 @@ def analyzeHotspots(bmkName, resultToAnalyze, indivOutputDir, summaryOutputFile,
         footer = ['TOTALS', str(eventAccum), str(percAccum)[0:5] + ' %',' ']
         out.write('{0:^20} {1:^20} {2:^20} {3}'.format(*footer))
         out.write('\n')
+    sys.stdout.write("done\n")
 
 #########################################
 #      DEFINE ABSOLUTE DIRECTORIES      #
@@ -242,8 +247,9 @@ spec2017RunDir = "run/" # NOTE: relative path - but its the same for every bmk
 #########################################
 #            HANDLE CLA                 #
 #########################################
+sys.stdout.write("Parsing directory arg...")
 if (len(sys.argv) != 2):
-    USAGE = ("USAGE\t:\n" +
+    USAGE = ("\nUSAGE\t:\n" +
             "\t\"python vgSpec2017GetResults.py <1>\"\n" +
             "\t<1> = The name of the directory of the run's results (i.e. \"3_21_vgRun\")")
     print USAGE
@@ -254,6 +260,7 @@ else:
     vgSpecThisResultsAnn = vgSpecThisResultsDir + "annotated/"
     vgSpecThisResultsFmt = vgSpecThisResultsDir + "formatted/"
     # Make the raw and annoted directories as well as the temporary
+    sys.stdout.write("done\n")
     prepResultsFolder(vgSpecThisResultsDir, vgSpecThisResultsRaw, vgSpecThisResultsAnn, vgSpecThisResultsFmt)
 
 #########################################
@@ -262,12 +269,14 @@ else:
 # Walk through all of the results files and annotate
 files = os.listdir(vgSpecThisResultsRaw)
 pattern = "*.*.txt" # All result files must be of the form ###.bmk_name.txt
+sys.stdout.write("Annotating all results...")
 for file in files:
     if fnmatch.fnmatch(file, pattern):
         # NOTE: This annotate is not going to work locally because we do not have the source locally, so we cannot test it locally
         annotateCmd = "cg_annotate --auto=yes " + vgSpecThisResultsRaw + file + " > " + vgSpecThisResultsAnn + file
         annotateRes = subprocess.Popen(annotateCmd, shell = True)
         annotateRes.communicate()
+sys.stdout.write("done\n")
 
 #########################################
 #          SORTING OF RESULTS           #
@@ -276,6 +285,7 @@ for file in files:
 files = os.listdir(vgSpecThisResultsAnn)
 pattern = "*.*.txt" # All result files must be of the form ###.bmk_name.txt
 data = [] # Holds the entire text dump of the annotated results
+sys.stdout.write("Reformatting annotated results...")
 for file in files:
     if fnmatch.fnmatch(file, pattern):
         data = open(vgSpecThisResultsAnn + file).readlines()
@@ -288,6 +298,7 @@ for file in files:
         with open(vgSpecThisResultsAnn + file, 'w') as updatedData:
             for item in data:
                 updatedData.write(item)
+sys.stdout.write("done\n")
 
 # Analyze the hotspots for every benchmark
 files = os.listdir(vgSpecThisResultsAnn)
@@ -310,7 +321,7 @@ for file in files:
         summaryOutputFile = indivOutputDir + "summary.txt"
         eventToAnalyze = "Bcm"
         analyzeHotspots(bmkName, resultToAnalyze, indivOutputDir, summaryOutputFile, eventToAnalyze, percentToAnalyze, regionToAnalyze)
-
+sys.stdout.write("Job has completed. Please see the results folder for this run.\n")
 
 #########################################
 #           UNUSED FUNCTIONS            #
