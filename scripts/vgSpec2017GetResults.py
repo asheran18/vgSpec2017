@@ -168,7 +168,7 @@ def analyzeHotspots(bmkName, resultToAnalyze, indivOutputDir, summaryOutputFile,
         # First get the source file the hot instruction is from by walking up
         while (k > 0):
             if ("Auto-annotated source" in rawData[k]):
-                source = rawData[k]
+                source = rawData[k].split(None, 1)[1]
                 break
             k -= 1
         # We grab the region of code around the hot instruction
